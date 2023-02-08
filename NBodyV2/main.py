@@ -1,5 +1,6 @@
 import time
 import random
+import os
 import pygame as py
 import numpy as np
 import pickle as pk
@@ -26,9 +27,7 @@ class Window:
         root = tk.Tk()
         root.withdraw()
 
-        self.resolution = [(1920, 1080), (1280, 1024), (1024, 768), (1280, 720)]
         self.surface = py.display.set_mode((1280, 720), HWSURFACE | DOUBLEBUF)
-        self.guiSurface = py.Surface((1280, 720))
         py.display.set_caption("Astra v2.0.0")
 
         # this was here for readability, used in LineGrid()
@@ -50,15 +49,17 @@ class Window:
         self.zoom_level = 1
 
         # used in SpawnBody() and EulerAlgo()
-        self.bodies = np.array([])  # stores body positions
-        self.velocity = np.array([])  # stores body velocities
-        self.mass = np.array([])  # stores body masses
-        self.startLaunch = False  # True if user left-clicks, initiates body launch
-        self.startLaunch_pos = np.array([0, 0])  # stores the launch start position
-        self.launchVector = np.array([0, 0])  # stores the launch direction
-        self.setMass = 10  # stores the selected mass
-        self.enableGalaxySpawn = False  # True if user activates spawn galaxy key
-        self.num_body = 0
+        self.bodies = np.array([])                  # stores body positions
+        self.velocity = np.array([])                # stores body velocities
+        self.mass = np.array([])                    # stores body masses
+        self.startLaunch = False                    # True if user left-clicks, initiates body launch
+        self.startLaunch_pos = np.array([0, 0])     # stores the launch start position
+        self.launchVector = np.array([0, 0])        # stores the launch direction
+        self.setMass = 10                           # stores the selected mass
+        self.enableGalaxySpawn = False              # True if user activates spawn galaxy key
+        self.num_body = 0                           # counts the number of bodies in the window
+        self.dt = [0.1, 0.05, 0.01]                 # timestep values for the algorithm
+        self.dtCyclesIndex = 2                      # timestep index
 
         # this was here for readability, used in ParticleEffect()
         self.surfaceW = None
@@ -74,22 +75,26 @@ class Window:
         self.side_angle = 180
         self.side_angle_speed = 100
 
+        # for detecting the pause command
         self.pause = False
 
+        # used in GUI()
         self.guiManager = gui.UIManager((self.surface.get_width(), self.surface.get_width()))
-        self.isGUIVisible = 1
-        self.mainSurfaceActive = True
-        self.GUI()
+        self.isGUIVisible = True
+        self.mainSurfaceActive = True   # checks if the clicks on the GUI or not,
+        self.PygameGUI()                      # False if the user clicks in the GUI
+
+        # used in PlainGUI
+        self.exit = py.image.load(os.path.join('menu', 'exit button', 'exit logo.png')).convert_alpha()
+        self.exitTransformed = py.transform.scale(self.exit, (52.5, 50))
+        self.rect = self.exitTransformed.get_rect()
+        self.rect.topright = (1280, 0)
 
     def EventHandle(self):
-        # global event
         for event in py.event.get():
             if event.type == py.QUIT:
                 exit()
-            """
-            if event.type == VIDEORESIZE:
-                surface = py.display.set_mode((event.w, event.h), HWSURFACE | DOUBLEBUF | RESIZABLE)
-            """
+
             if event.type == py.KEYDOWN:
                 if event.key == py.K_ESCAPE:
                     exit()
@@ -113,8 +118,8 @@ class Window:
                     self.setMass = 900
                 if event.key == py.K_0:
                     self.setMass = 10
-                if event.key == py.K_BACKSLASH:
-                    self.setMass = 10000
+                if event.key == py.K_MINUS:
+                    self.setMass = 100000
                 if event.key == py.K_g:
                     self.enableGalaxySpawn = not self.enableGalaxySpawn
                 if event.key == py.K_p:
@@ -124,6 +129,13 @@ class Window:
                     self.bodies = np.array([])
                     self.velocity = np.array([])
                     self.mass = np.array([])
+                if event.key == py.K_RIGHT:
+                    self.dtCyclesIndex = (self.dtCyclesIndex + 1) % len(self.dt)
+                if event.key == py.K_LEFT:
+                    self.dtCyclesIndex = (self.dtCyclesIndex - 1) % len(self.dt)
+                if event.key == py.K_v:
+                    self.isGUIVisible = False
+                    self.GUI()
                 if (event.mod & py.KMOD_CTRL) and event.key == K_s:
                     self.SaveState()
                     py.key.set_mods(0)
@@ -132,11 +144,11 @@ class Window:
                     py.key.set_mods(0)
 
             if event.type == MOUSEBUTTONDOWN:
+                # the detection for GUI surface is still sensitive, this is what i came up for now
                 if event.button == 1:
-                    if self.guiManager.get_hovering_any_element():
+                    if self.guiManager.get_hovering_any_element() or self.rect.collidepoint(event.pos):
                         self.mainSurfaceActive = False
                     else:
-                        print("called")
                         self.mainSurfaceActive = True
                         self.SpawnBody(event.pos, [0, 0], self.setMass)
                         self.startLaunch = True
@@ -158,10 +170,8 @@ class Window:
                     self.CameraPan(self.x_pan, self.y_pan)
 
             if event.type == MOUSEBUTTONUP:
-                # clickedElement = self.guiManager.process_events()
                 if event.button == 1:
                     if self.mainSurfaceActive:
-                        print(self.mainSurfaceActive)
                         self.startLaunch = False
                         x, y = self.launchVector
                         self.velocity[-1] = np.array([x, y]) / (self.zoom_level ** 2)
@@ -174,47 +184,53 @@ class Window:
                     self.startPan = False
 
             if event.type == gui.UI_TEXT_ENTRY_FINISHED:
-                if event.ui_element == self.guiCenterMass:
-                    self.center_mass = int(event.text)
+                # try-catch block for catching unwanted error if the string can't be converted to int
+                try:
+                    if event.ui_element == self.guiCenterMass:
+                        self.center_mass = int(event.text)
 
-                if event.ui_element == self.guiGalaxySize:
-                    self.galaxy_size = int(event.text)
+                    if event.ui_element == self.guiGalaxySize:
+                        self.galaxy_size = int(event.text)
 
-                if event.ui_element == self.guiGalaxyRadius:
-                    self.galaxy_radius = int(event.text)
+                    if event.ui_element == self.guiGalaxyRadius:
+                        self.galaxy_radius = int(event.text)
 
-                if event.ui_element == self.guiBodyMasses:
-                    self.body_masses = int(event.text)
+                    if event.ui_element == self.guiBodyMasses:
+                        self.body_masses = int(event.text)
 
-                if event.ui_element == self.guiBodyVelocity:
-                    self.body_velocity = int(event.text)
+                    if event.ui_element == self.guiBodyVelocity:
+                        self.body_velocity = int(event.text)
 
-                if event.ui_element == self.guiSideAngle:
-                    self.side_angle = int(event.text)
+                    if event.ui_element == self.guiSideAngle:
+                        self.side_angle = int(event.text)
 
-                if event.ui_element == self.guiSideAngleSpeed:
-                    self.side_angle_speed = int(event.text)
+                    if event.ui_element == self.guiSideAngleSpeed:
+                        self.side_angle_speed = int(event.text)
+
+                except ValueError:
+                    pass
 
             self.guiManager.process_events(event)
 
         if self.startLaunch:
             dv = self.startLaunch_pos - py.mouse.get_pos()
             self.launchVector = dv
-            # print(self.launchVector)
 
-    def GUI(self):
+    def PygameGUI(self):
         manager = self.guiManager
+        isVisible = self.isGUIVisible
+        print("current", isVisible)
 
         gui.elements.UITextBox(relative_rect=py.Rect(10, 15, 160, 30),
                                html_text="<font size=2>Galaxy Parameters</font>",
-                               wrap_to_height=True, manager=manager, visible=self.isGUIVisible)
+                               wrap_to_height=True, manager=manager, visible=isVisible)
         gui.elements.UITextBox(relative_rect=py.Rect(10, 50, 120, 30),
-                               html_text="Center Mass", manager=manager, visible=self.isGUIVisible)
+                               html_text="Center Mass", manager=manager, visible=isVisible)
         self.guiCenterMass = gui.elements.UITextEntryLine(relative_rect=py.Rect(10, 80, 85, 30),
                                                           initial_text=str(self.center_mass), manager=manager,
-                                                          visible=self.isGUIVisible)
+                                                          visible=isVisible)
         gui.elements.UITextBox(relative_rect=py.Rect(10, 120, 120, 30),
-                               html_text="Galaxy Size", manager=manager)
+                               html_text="Galaxy Size", manager=manager, visible=isVisible)
         self.guiGalaxySize = gui.elements.UITextEntryLine(relative_rect=py.Rect(10, 150, 85, 30),
                                                           initial_text=str(self.galaxy_size), manager=manager,
                                                           visible=self.isGUIVisible)
@@ -249,9 +265,12 @@ class Window:
                                                               initial_text=str(self.body_velocity), manager=manager,
                                                               visible=self.isGUIVisible)
 
+    def PlainGUI(self):
+        self.surface.blit(self.exitTransformed, (self.rect.topleft[0], self.rect.topleft[1]))
+
     def ParticleEffects(self):
         r = 64
-        sz = int(max(min(abs(4 * self.zoom_level), 1), 1))
+        sz = 1
 
         self.surfaceY = py.Surface((r, r))
         py.draw.circle(self.surfaceY, (1, 1, 1), (32, 32), 32, 32)  # Soft Glow Color
@@ -348,6 +367,8 @@ class Window:
         self.velocity = np.array(vel_list, dtype=float)
         self.mass = np.array(mass_list, dtype=float)
 
+        self.num_body += 1
+
         # print("MPos: ", self.bodies, "Mass", self.mass)
 
     def SpawnGalaxy(self, mouse_pos, vel):
@@ -404,7 +425,7 @@ class Window:
         G = 0.66743  # N m^2 / kg^2
 
         # Timestep
-        dt = 0.01
+        dt = self.dt[self.dtCyclesIndex]
 
         # artificial distancing to avoid divide by 0
         eps = 1e-9
@@ -491,10 +512,8 @@ class Window:
             self.Gridlines()
             self.DrawBody()
             self.surface.blit(self.surface, (0, 0))
-            # self.guiSurface.fill((0, 0, 0))
             self.guiManager.draw_ui(self.surface)
-            # self.surface.blit(self.guiSurface, (0, 0), special_flags=py.BLEND_RGBA_ADD)
-
+            self.PlainGUI()
             if not self.pause and not self.startLaunch:
                 self.EulerAlgo()
             py.display.flip()
