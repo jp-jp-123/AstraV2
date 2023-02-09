@@ -85,10 +85,19 @@ class Window:
         self.PygameGUI()                      # False if the user clicks in the GUI
 
         # used in PlainGUI
-        self.exit = py.image.load(os.path.join('menu', 'exit button', 'exit logo.png')).convert_alpha()
-        self.exitTransformed = py.transform.scale(self.exit, (52.5, 50))
-        self.rect = self.exitTransformed.get_rect()
+        self.exitLogo = py.image.load(os.path.join('menu', 'exit button', 'exit logo.png')).convert_alpha()
+        self.exitLogoTransformed = py.transform.scale(self.exitLogo, (52.5, 50))
+        self.rect = self.exitLogoTransformed.get_rect()
         self.rect.topright = (1280, 0)
+        self.optionActive = False
+
+        self.exit = py.image.load(os.path.join('menu', 'exit button', 'exit.png')).convert_alpha()
+        self.yes = py.image.load(os.path.join('menu', 'exit button', 'yes.png')).convert_alpha()
+        self.rect2 = self.yes.get_rect()
+        self.rect2.topleft = (440, 423)
+        self.no = py.image.load(os.path.join('menu', 'exit button', 'no.png')).convert_alpha()
+        self.rect3 = self.no.get_rect()
+        self.rect3.topleft = (730, 423)
 
     def EventHandle(self):
         for event in py.event.get():
@@ -124,6 +133,8 @@ class Window:
                     self.enableGalaxySpawn = not self.enableGalaxySpawn
                 if event.key == py.K_p:
                     self.pause = not self.pause
+                    # self.optionActive = not self.optionActive
+                    # self.mainSurfaceActive = not self.mainSurfaceActive
                 if event.key == py.K_r:
                     self.num_body = 0
                     self.bodies = np.array([])
@@ -135,7 +146,7 @@ class Window:
                     self.dtCyclesIndex = (self.dtCyclesIndex - 1) % len(self.dt)
                 if event.key == py.K_v:
                     self.isGUIVisible = False
-                    self.GUI()
+                    self.PygameGUI()
                 if (event.mod & py.KMOD_CTRL) and event.key == K_s:
                     self.SaveState()
                     py.key.set_mods(0)
@@ -146,8 +157,19 @@ class Window:
             if event.type == MOUSEBUTTONDOWN:
                 # the detection for GUI surface is still sensitive, this is what i came up for now
                 if event.button == 1:
-                    if self.guiManager.get_hovering_any_element() or self.rect.collidepoint(event.pos):
+                    if self.guiManager.get_hovering_any_element():
                         self.mainSurfaceActive = False
+                    if self.rect.collidepoint(event.pos):
+                        self.pause = not self.pause
+                        self.optionActive = not self.optionActive
+                        self.mainSurfaceActive = False
+                    if self.optionActive:
+                        if self.rect2.collidepoint(event.pos):
+                            print("yes")
+                        if self.rect3.collidepoint(event.pos):
+                            print("no")
+                            self.optionActive = False
+                            self.mainSurfaceActive = True
                     else:
                         self.mainSurfaceActive = True
                         self.SpawnBody(event.pos, [0, 0], self.setMass)
@@ -171,7 +193,7 @@ class Window:
 
             if event.type == MOUSEBUTTONUP:
                 if event.button == 1:
-                    if self.mainSurfaceActive:
+                    if self.mainSurfaceActive and not self.optionActive:
                         self.startLaunch = False
                         x, y = self.launchVector
                         self.velocity[-1] = np.array([x, y]) / (self.zoom_level ** 2)
@@ -266,7 +288,17 @@ class Window:
                                                               visible=self.isGUIVisible)
 
     def PlainGUI(self):
-        self.surface.blit(self.exitTransformed, (self.rect.topleft[0], self.rect.topleft[1]))
+        self.surface.blit(self.exitLogoTransformed, (self.rect.topleft[0], self.rect.topleft[1]))
+
+        if self.pause and self.optionActive:
+            exitTransformed = py.transform.scale(self.exit, (500, 71))
+            self.surface.blit(exitTransformed, (390, 289))
+
+            yesTransformed = py.transform.scale(self.yes, (110, 63))
+            self.surface.blit(yesTransformed, (440, 423))
+
+            noTransformed = py.transform.scale(self.no, (110, 63))
+            self.surface.blit(noTransformed, (730, 423))
 
     def ParticleEffects(self):
         r = 64
