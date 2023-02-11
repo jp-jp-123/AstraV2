@@ -1,6 +1,7 @@
 import time
 import random
 import os
+import scripthandler
 import pygame as py
 import numpy as np
 import pickle as pk
@@ -28,6 +29,8 @@ class Window:
         root.withdraw()
 
         self.surface = py.display.set_mode((1280, 720), HWSURFACE | DOUBLEBUF)
+        self.runtime = 0
+        self.isRunning = True
         py.display.set_caption("Astra v2.0.0")
 
         # this was here for readability, used in LineGrid()
@@ -80,24 +83,27 @@ class Window:
 
         # used in GUI()
         self.guiManager = gui.UIManager((self.surface.get_width(), self.surface.get_width()))
-        self.isGUIVisible = True
-        self.mainSurfaceActive = True   # checks if the clicks on the GUI or not,
-        self.PygameGUI()                      # False if the user clicks in the GUI
+        self.mainSurfaceActive = True   # checks if the clicks on the GUI or not, False if the user clicks in the GUI
+        self.PygameGUI()
 
         # used in PlainGUI
         self.exitLogo = py.image.load(os.path.join('menu', 'exit button', 'exit logo.png')).convert_alpha()
+        self.exit = py.image.load(os.path.join('menu', 'exit button', 'exit.png')).convert_alpha()
+        self.yes = py.image.load(os.path.join('menu', 'exit button', 'yes.png')).convert_alpha()
+        self.no = py.image.load(os.path.join('menu', 'exit button', 'no.png')).convert_alpha()
+
         self.exitLogoTransformed = py.transform.scale(self.exitLogo, (52.5, 50))
         self.rect = self.exitLogoTransformed.get_rect()
         self.rect.topright = (1280, 0)
-        self.optionActive = False
-
-        self.exit = py.image.load(os.path.join('menu', 'exit button', 'exit.png')).convert_alpha()
-        self.yes = py.image.load(os.path.join('menu', 'exit button', 'yes.png')).convert_alpha()
         self.rect2 = self.yes.get_rect()
         self.rect2.topleft = (440, 423)
-        self.no = py.image.load(os.path.join('menu', 'exit button', 'no.png')).convert_alpha()
         self.rect3 = self.no.get_rect()
         self.rect3.topleft = (730, 423)
+
+        # checks if the options are active, serves as an additional pause condition for when option/exit menu is active
+        self.optionActive = False
+        # checks if mouse button down spawned something. This is to avoid triggering events in mouse up
+        self.isSpawned = False
 
     def EventHandle(self):
         for event in py.event.get():
@@ -106,6 +112,7 @@ class Window:
 
             if event.type == py.KEYDOWN:
                 if event.key == py.K_ESCAPE:
+                    self.isRunning = False
                     exit()
                 if event.key == py.K_1:
                     self.setMass = 100
@@ -133,8 +140,6 @@ class Window:
                     self.enableGalaxySpawn = not self.enableGalaxySpawn
                 if event.key == py.K_p:
                     self.pause = not self.pause
-                    # self.optionActive = not self.optionActive
-                    # self.mainSurfaceActive = not self.mainSurfaceActive
                 if event.key == py.K_r:
                     self.num_body = 0
                     self.bodies = np.array([])
@@ -144,9 +149,6 @@ class Window:
                     self.dtCyclesIndex = (self.dtCyclesIndex + 1) % len(self.dt)
                 if event.key == py.K_LEFT:
                     self.dtCyclesIndex = (self.dtCyclesIndex - 1) % len(self.dt)
-                if event.key == py.K_v:
-                    self.isGUIVisible = False
-                    self.PygameGUI()
                 if (event.mod & py.KMOD_CTRL) and event.key == K_s:
                     self.SaveState()
                     py.key.set_mods(0)
@@ -159,22 +161,26 @@ class Window:
                 if event.button == 1:
                     if self.guiManager.get_hovering_any_element():
                         self.mainSurfaceActive = False
-                    if self.rect.collidepoint(event.pos):
+                        self.isSpawned = False
+                    elif self.rect.collidepoint(event.pos):
                         self.pause = not self.pause
                         self.optionActive = not self.optionActive
-                        self.mainSurfaceActive = False
-                    if self.optionActive:
+                        self.mainSurfaceActive = not self.mainSurfaceActive
+                        self.isSpawned = False
+                    elif self.optionActive:
                         if self.rect2.collidepoint(event.pos):
-                            print("yes")
+                            self.isRunning = False
+                            scripthandler.mainMenu()
                         if self.rect3.collidepoint(event.pos):
-                            print("no")
                             self.optionActive = False
                             self.mainSurfaceActive = True
+                            self.pause = False
                     else:
                         self.mainSurfaceActive = True
                         self.SpawnBody(event.pos, [0, 0], self.setMass)
                         self.startLaunch = True
                         self.startLaunch_pos = np.array(py.mouse.get_pos())
+                        self.isSpawned = True
                 if event.button == 3:
                     self.startPan = True
                     self.startPanX, self.startPanY = py.mouse.get_pos()
@@ -193,13 +199,12 @@ class Window:
 
             if event.type == MOUSEBUTTONUP:
                 if event.button == 1:
-                    if self.mainSurfaceActive and not self.optionActive:
+                    if self.mainSurfaceActive and self.isSpawned:
                         self.startLaunch = False
                         x, y = self.launchVector
                         self.velocity[-1] = np.array([x, y]) / (self.zoom_level ** 2)
                         if self.enableGalaxySpawn:
                             self.SpawnGalaxy(self.bodies[-1], self.velocity[-1])
-                        # print("Vel", self.velocity)
                     else:
                         pass
                 if event.button == 3:
@@ -240,55 +245,54 @@ class Window:
 
     def PygameGUI(self):
         manager = self.guiManager
-        isVisible = self.isGUIVisible
-        print("current", isVisible)
 
         gui.elements.UITextBox(relative_rect=py.Rect(10, 15, 160, 30),
                                html_text="<font size=2>Galaxy Parameters</font>",
-                               wrap_to_height=True, manager=manager, visible=isVisible)
+                               wrap_to_height=True, manager=manager)
         gui.elements.UITextBox(relative_rect=py.Rect(10, 50, 120, 30),
-                               html_text="Center Mass", manager=manager, visible=isVisible)
+                               html_text="Center Mass", manager=manager)
         self.guiCenterMass = gui.elements.UITextEntryLine(relative_rect=py.Rect(10, 80, 85, 30),
-                                                          initial_text=str(self.center_mass), manager=manager,
-                                                          visible=isVisible)
+                                                          initial_text=str(self.center_mass), manager=manager)
         gui.elements.UITextBox(relative_rect=py.Rect(10, 120, 120, 30),
-                               html_text="Galaxy Size", manager=manager, visible=isVisible)
+                               html_text="Galaxy Size", manager=manager)
         self.guiGalaxySize = gui.elements.UITextEntryLine(relative_rect=py.Rect(10, 150, 85, 30),
-                                                          initial_text=str(self.galaxy_size), manager=manager,
-                                                          visible=self.isGUIVisible)
+                                                          initial_text=str(self.galaxy_size), manager=manager)
         gui.elements.UITextBox(relative_rect=py.Rect(130, 120, 120, 30),
-                               html_text="Galaxy Radius", manager=manager,
-                               visible=self.isGUIVisible)
+                               html_text="Galaxy Radius", manager=manager)
         self.guiGalaxyRadius = gui.elements.UITextEntryLine(relative_rect=py.Rect(130, 150, 85, 30),
-                                                            initial_text=str(self.galaxy_radius), manager=manager,
-                                                            visible=self.isGUIVisible)
+                                                            initial_text=str(self.galaxy_radius), manager=manager)
         gui.elements.UITextBox(relative_rect=py.Rect(10, 180, 120, 30),
-                               html_text="Body Masses", manager=manager,
-                               visible=self.isGUIVisible)
+                               html_text="Body Masses", manager=manager)
         self.guiBodyMasses = gui.elements.UITextEntryLine(relative_rect=py.Rect(10, 210, 85, 30),
-                                                          initial_text=str(self.body_masses), manager=manager,
-                                                          visible=self.isGUIVisible)
+                                                          initial_text=str(self.body_masses), manager=manager)
         gui.elements.UITextBox(relative_rect=py.Rect(130, 180, 120, 30),
-                               html_text="Body Velocity", manager=manager,
-                               visible=self.isGUIVisible)
+                               html_text="Body Velocity", manager=manager)
         self.guiBodyVelocity = gui.elements.UITextEntryLine(relative_rect=py.Rect(130, 210, 85, 30),
-                                                            initial_text=str(self.body_velocity), manager=manager,
-                                                            visible=self.isGUIVisible)
+                                                            initial_text=str(self.body_velocity), manager=manager)
         gui.elements.UITextBox(relative_rect=py.Rect(10, 240, 120, 30),
-                               html_text="Side Angle", manager=manager,
-                               visible=self.isGUIVisible)
+                               html_text="Side Angle", manager=manager)
         self.guiSideAngle = gui.elements.UITextEntryLine(relative_rect=py.Rect(10, 270, 85, 30),
-                                                         initial_text=str(self.side_angle), manager=manager,
-                                                         visible=self.isGUIVisible)
+                                                         initial_text=str(self.side_angle), manager=manager)
         gui.elements.UITextBox(relative_rect=py.Rect(130, 240, 150, 30),
-                               html_text="Side Angle Speed", manager=manager,
-                               visible=self.isGUIVisible)
+                               html_text="Side Angle Speed", manager=manager)
         self.guiSideAngleSpeed = gui.elements.UITextEntryLine(relative_rect=py.Rect(130, 270, 85, 30),
-                                                              initial_text=str(self.body_velocity), manager=manager,
-                                                              visible=self.isGUIVisible)
+                                                              initial_text=str(self.body_velocity), manager=manager)
 
     def PlainGUI(self):
         self.surface.blit(self.exitLogoTransformed, (self.rect.topleft[0], self.rect.topleft[1]))
+
+        font = py.font.Font(os.path.join('menu', 'texts', 'coure.fon'), 10)
+        numBodyText = "Bodies: " + str(self.num_body)
+        numBodyText = font.render(numBodyText, True, WHITE)
+        self.surface.blit(numBodyText, (0, 700))
+
+        dtText = "Timestep: " + str(self.dt[self.dtCyclesIndex])
+        dtText = font.render(dtText, True, WHITE)
+        self.surface.blit(dtText, (100, 700))
+
+        runtimeText = "Runtime: " + str(self.runtime)
+        runtimeText = font.render(runtimeText, True, WHITE)
+        self.surface.blit(runtimeText, (230, 700))
 
         if self.pause and self.optionActive:
             exitTransformed = py.transform.scale(self.exit, (500, 71))
@@ -534,8 +538,7 @@ class Window:
 
     def Run(self):
         Clock = py.time.Clock()
-        running = True
-        while running:
+        while self.isRunning:
             in_t = time.time()
             time_delta = Clock.tick(60) / 1000
             self.EventHandle()
@@ -549,9 +552,9 @@ class Window:
             if not self.pause and not self.startLaunch:
                 self.EulerAlgo()
             py.display.flip()
-            # print(time.time() - in_t)
+            self.runtime = time.time() - in_t
 
-        # quit py after closing window
+        # quit pygame after closing window
         py.quit()
 
 

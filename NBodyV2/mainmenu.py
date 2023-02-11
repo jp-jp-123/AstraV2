@@ -1,21 +1,29 @@
+print("pygame")
 import pygame
+print("os")
 import os
+print("handler")
+import scripthandler
+print("vidplay")
 from pyvidplayer import Video
-import time
 
 ## creating the window
 WIDTH, HEIGHT = 1280, 720
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Main Menu")  ## for the caption on top of window
 
-WHITE = (255, 255, 255)  ## creating variable to easy call colors
-# gatherings pictures
-BACKGROUND = pygame.image.load(os.path.join('menu', 'texts', 'splash screen.png'))
+BACKGROUND = pygame.image.load(os.path.join('menu', 'backgrounds', 'splash screen.png'))
 TITLE = pygame.image.load(os.path.join('menu', 'texts', 'title.png'))
 START = pygame.image.load(os.path.join('menu', 'texts', 'start.png'))
-OPTIONS = pygame.image.load(os.path.join('menu', 'texts', 'options.png'))
+ABOUT = pygame.image.load(os.path.join('menu', 'texts', 'about.png'))
+HELP = pygame.image.load(os.path.join('menu', 'texts', 'help.png'))
 EXIT = pygame.image.load(os.path.join('menu', 'texts', 'exit.png'))
+BACK = pygame.image.load(os.path.join('menu', 'texts', 'back.png'))
 BORDER = pygame.image.load(os.path.join('menu', 'texts', 'border.png'))
+
+ABOUT_PAGE = pygame.image.load(os.path.join('menu', 'backgrounds', 'about page.png'))
+HELP_PAGE = pygame.image.load(os.path.join('menu', 'backgrounds', 'help page.png'))
+
 FPS = 80
 
 
@@ -25,36 +33,37 @@ class Button():
         self.image = image
         self.rect = self.image.get_rect()
         self.rect.topleft = (x, y)
-        self.clicked = False  # var. prevents multiple click register
+        self.clicked = False  # variable to prevent multiple click registration
+        self.timer = pygame.time.get_ticks()  # get the time when the button was last clicked
 
     def draw(self):
         action = False
-        # mouse position
-        pos = pygame.mouse.get_pos()
-        # print(pos)
+        pos = pygame.mouse.get_pos()  # get mouse position
+        clicked = pygame.mouse.get_pressed()  # get mouse click status
 
-        # mouse on button
-        if self.rect.collidepoint(pos):
-            WIN.blit(BORDER, (self.rect.x, self.rect.y))
-            if pygame.mouse.get_pressed()[0] == 1 and self.clicked == False:  # prevents multiple click register
-                self.clicked = True
-                action = True
-        # allows buttons to be re-clicked
+        if self.rect.collidepoint(pos):  # check if mouse is on the button
+            WIN.blit(BORDER, (self.rect.x - 5, self.rect.y + 5))
+            # print(self.rect.x, self.rect.y)
+            if clicked[0] == 1 and self.clicked == False:  # check if left mouse button is clicked
+                current_time = pygame.time.get_ticks()
+                if current_time - self.timer == 1:  # check if enough time has passed since last click
+                    self.clicked = True
+                    self.timer = current_time
+                    action = True
         if pygame.mouse.get_pressed()[0] == 0:
             self.clicked = False
 
-        # draws button on screen
         WIN.blit(self.image, (self.rect.x, self.rect.y))
 
         return action
 
 
 # button instances
-vid = Video("menu/astra.MOV")
+vid = Video("menu/backgrounds/astra.MOV")
 vid.set_size((1280, 720))
 
-
 def main_window():
+
     def splash():
         # Make a copy of the image to use as the faded version
         faded_image = BACKGROUND.copy()
@@ -91,7 +100,6 @@ def main_window():
                 if alpha <= 0:
                     alpha = 0
                     fade = False
-                    loop = False
             faded_image.set_alpha(alpha)
 
             # Update the display
@@ -101,40 +109,65 @@ def main_window():
 
     clock = pygame.time.Clock()
     run = True
-
+    state = "home"
     while run:
-        ## background
-        vid.draw(WIN, (0, 0))
-        end = vid.active  # tells if the vid is finished
-        # print(count)
+        if state == "home":
+            def background_vid():
+                ## background
 
-        # restarts the vid when finished = looped bg
-        if end == False:
-            # print("End")
-            vid.restart()
-        # else:
-        #    print("Start")
+                vid.draw(WIN, (0, 0), force_draw=False)
+                end = vid.active  # tells if the vid is finished
+                # restarts the vid when finished = looped bg
+                if end == False:
+                    # print("End")
+                    vid.restart()
 
-        WIN.blit(TITLE, (0, 0))
-        start_button = Button(540, 280, START)
-        options_button = Button(540, 380, OPTIONS)
-        exit_button = Button(540, 480, EXIT)
+            background_vid()
 
-        # Buttons
-        if start_button.draw() == True:
-            print('START')
-        if options_button.draw() == True:
-            print('OPTIONS')
-        if exit_button.draw():
-            run = False
+            WIN.blit(TITLE, (0, 0))
+            start_button = Button(540, 230, START)
+            help_button = Button(540, 300, HELP)
+            about_button = Button(542, 370, ABOUT)
+            exit_button = Button(540, 440, EXIT)
 
-        ## loop for the game whether to quit
+            # Buttons
+            if start_button.draw() == True:
+                state = "start"
+            if help_button.draw() == True:
+                state = "help"
+            if about_button.draw() == True:
+                state = "about"
+            if exit_button.draw() == True:
+                run = False
+
+        elif state == "about":
+            background_vid()
+            WIN.blit(ABOUT_PAGE, (0, 0))
+            back_button = Button(50, 610, BACK)
+            if back_button.draw() == True:
+                print('BACK')
+                state = "home"
+
+        elif state == "help":
+            background_vid()
+            WIN.blit(HELP_PAGE, (0, 0))
+            back_button = Button(50, 610, BACK)
+            if back_button.draw() == True:
+                print('BACK')
+                state = "home"
+
+                ## loop for the game whether to quit
         clock.tick(FPS)  ## sets the fps
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
-                # vid.close()
                 exit()
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if state == "start":
+                    vid.close()
+                    run = False
+                    scripthandler.mainSim()
+                    # pygame.quit()
 
         pygame.display.update()
 
