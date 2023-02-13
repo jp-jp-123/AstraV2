@@ -1,5 +1,5 @@
 def mainSim():
-    from main import Window
+    from mainsim import Window
     w = Window()
     w.Run()
 

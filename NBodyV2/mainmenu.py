@@ -1,18 +1,13 @@
-print("pygame")
 import pygame
-print("os")
 import os
-print("handler")
 import scripthandler
-print("vidplay")
-from pyvidplayer import Video
+
 
 ## creating the window
 WIDTH, HEIGHT = 1280, 720
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Main Menu")  ## for the caption on top of window
 
-BACKGROUND = pygame.image.load(os.path.join('menu', 'backgrounds', 'splash screen.png'))
 TITLE = pygame.image.load(os.path.join('menu', 'texts', 'title.png'))
 START = pygame.image.load(os.path.join('menu', 'texts', 'start.png'))
 ABOUT = pygame.image.load(os.path.join('menu', 'texts', 'about.png'))
@@ -21,11 +16,16 @@ EXIT = pygame.image.load(os.path.join('menu', 'texts', 'exit.png'))
 BACK = pygame.image.load(os.path.join('menu', 'texts', 'back.png'))
 BORDER = pygame.image.load(os.path.join('menu', 'texts', 'border.png'))
 
+BACKGROUND = pygame.image.load(os.path.join('menu', 'backgrounds', 'bg pic.png'))
+SPLASH = pygame.image.load(os.path.join('menu', 'backgrounds', 'splash screen.png'))
 ABOUT_PAGE = pygame.image.load(os.path.join('menu', 'backgrounds', 'about page.png'))
 HELP_PAGE = pygame.image.load(os.path.join('menu', 'backgrounds', 'help page.png'))
 
 FPS = 80
 
+pygame.mixer.init()
+music = pygame.mixer.Sound('menu/audio.mp3')
+music.play(-1)
 
 ##button class
 class Button():
@@ -54,19 +54,14 @@ class Button():
             self.clicked = False
 
         WIN.blit(self.image, (self.rect.x, self.rect.y))
-
         return action
 
-
-# button instances
-vid = Video("menu/backgrounds/astra.MOV")
-vid.set_size((1280, 720))
 
 def main_window():
 
     def splash():
         # Make a copy of the image to use as the faded version
-        faded_image = BACKGROUND.copy()
+        faded_image = SPLASH.copy()
 
         # Set the alpha value of the faded image to 0 (completely transparent)
         faded_image.set_alpha(0)
@@ -112,18 +107,8 @@ def main_window():
     state = "home"
     while run:
         if state == "home":
-            def background_vid():
-                ## background
 
-                vid.draw(WIN, (0, 0), force_draw=False)
-                end = vid.active  # tells if the vid is finished
-                # restarts the vid when finished = looped bg
-                if end == False:
-                    # print("End")
-                    vid.restart()
-
-            background_vid()
-
+            WIN.blit(BACKGROUND, (0, 0))
             WIN.blit(TITLE, (0, 0))
             start_button = Button(540, 230, START)
             help_button = Button(540, 300, HELP)
@@ -141,7 +126,6 @@ def main_window():
                 run = False
 
         elif state == "about":
-            background_vid()
             WIN.blit(ABOUT_PAGE, (0, 0))
             back_button = Button(50, 610, BACK)
             if back_button.draw() == True:
@@ -149,7 +133,7 @@ def main_window():
                 state = "home"
 
         elif state == "help":
-            background_vid()
+            WIN.blit(BACKGROUND, (0, 0))
             WIN.blit(HELP_PAGE, (0, 0))
             back_button = Button(50, 610, BACK)
             if back_button.draw() == True:
@@ -161,16 +145,13 @@ def main_window():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
-                exit()
             elif event.type == pygame.MOUSEBUTTONUP:
                 if state == "start":
-                    vid.close()
-                    run = False
+                    music.stop()
                     scripthandler.mainSim()
-                    # pygame.quit()
+                    run = False
 
         pygame.display.update()
-
     pygame.quit()
 
 
